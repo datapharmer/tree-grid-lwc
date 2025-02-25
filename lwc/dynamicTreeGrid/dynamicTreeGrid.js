@@ -2,19 +2,19 @@ import { LightningElement, wire } from "lwc";
 import { ShowToastEvent } from "lightning/platformShowToastEvent";
 
 // Import the schema
-import ACCOUNT_NAME from "@salesforce/schema/Account.Name";
-import PARENT_ACCOUNT_NAME from "@salesforce/schema/Account.Parent.Name";
-import TYPE from "@salesforce/schema/Account.Type";
+import CAMPAIGN_NAME from "@salesforce/schema/Campaign.Name";
+import PARENT_CAMPAIGN_NAME from "@salesforce/schema/Campaign.Parent.Name";
+import TYPE from "@salesforce/schema/Campaign.Type";
 
 // Import Apex
-import getAllParentAccounts from "@salesforce/apex/DynamicTreeGridController.getAllParentAccounts";
-import getChildAccounts from "@salesforce/apex/DynamicTreeGridController.getChildAccounts";
+import getAllParentCampaigns from "@salesforce/apex/DynamicTreeGridController.getAllParentCampaigns";
+import getChildCampaigns from "@salesforce/apex/DynamicTreeGridController.getChildCampaigns";
 
 // Global Constants
 const COLS = [
-	{ fieldName: "Name", label: "Account Name" },
-	{ fieldName: "ParentAccountName", label: "Parent Account" },
-	{ fieldName: "Type", label: "Account Type" }
+	{ fieldName: "Name", label: "Campaign Name" },
+	{ fieldName: "ParentCampaignName", label: "Parent Campaign" },
+	{ fieldName: "Type", label: "Campaign Type" }
 ];
 
 export default class DynamicTreeGrid extends LightningElement {
@@ -22,15 +22,15 @@ export default class DynamicTreeGrid extends LightningElement {
 	isLoading = true;
 	gridData = [];
 
-	@wire(getAllParentAccounts, {})
-	parentAccounts({ error, data }) {
+	@wire(getAllParentCampaigns, {})
+	parentCampaigns({ error, data }) {
 		if (error) {
-			console.error("error loading accounts", error);
+			console.error("error loading campaigns", error);
 		} else if (data) {
-			this.gridData = data.map((account) => ({
+			this.gridData = data.map((campaign) => ({
 				_children: [],
-				...account,
-				ParentAccountName: account.Parent?.Name
+				...campaign,
+				ParentCampaignName: campaign.Parent?.Name
 			}));
 			this.isLoading = false;
 		}
@@ -43,14 +43,14 @@ export default class DynamicTreeGrid extends LightningElement {
 		const rowName = event.detail.name;
 		if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
 			this.isLoading = true;
-			getChildAccounts({ parentId: rowName })
+			getChildCampaigns({ parentId: rowName })
 				.then((result) => {
 					console.log(result);
 					if (result && result.length > 0) {
 						const newChildren = result.map((child) => ({
 							_children: [],
 							...child,
-							ParentAccountName: child.Parent?.Name
+							ParentCampaignName: child.Parent?.Name
 						}));
 						this.gridData = this.getNewDataWithChildren(
 							rowName,
@@ -61,17 +61,17 @@ export default class DynamicTreeGrid extends LightningElement {
 						this.dispatchEvent(
 							new ShowToastEvent({
 								title: "No children",
-								message: "No children for the selected Account",
+								message: "No children for the selected Campaign",
 								variant: "warning"
 							})
 						);
 					}
 				})
 				.catch((error) => {
-					console.log("Error loading child accounts", error);
+					console.log("Error loading child campaigns", error);
 					this.dispatchEvent(
 						new ShowToastEvent({
-							title: "Error Loading Children Accounts",
+							title: "Error Loading Children Campaigns",
 							message: error + " " + error?.message,
 							variant: "error"
 						})
