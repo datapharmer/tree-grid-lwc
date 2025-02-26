@@ -39,7 +39,6 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     gridColumns = COLS;
     isLoading = true;
     gridData = [];
-    _initialLoadComplete = false;
 
     @wire(getAllParentCampaigns, {})
     parentCampaigns({ error, data }) {
@@ -50,7 +49,6 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             this.isLoading = false;
         }
     }
-
 
     handleOnToggle(event) {
         const rowName = event.detail.name;
@@ -88,56 +86,75 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
         }
     }
 
-
     // --- Data Processing Functions ---
-
     processCampaignData(campaigns) {
-      this.gridData = campaigns.map((campaign) => ({
-        ...campaign,
-        _children: undefined, // Crucial: Set to undefined initially
-        Name: campaign.Name,
-        ParentCampaignName: campaign.Parent?.Name,
-        campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined,
-        parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
-        Id: campaign.Id,
-      }));
-      // Check for children after initial data load
-      this.checkInitialChildren();
-    }
-
-    processChildCampaignData(campaigns, parentRowName) {
-        const newChildren = campaigns.map((campaign) => ({
+        this.gridData = campaigns.map((campaign) => ({
             ...campaign,
-            _children: undefined, // Crucial: Set to undefined initially
+            _children: undefined, // Initially undefined
             Name: campaign.Name,
             ParentCampaignName: campaign.Parent?.Name,
-            campaignUrl: `/${campaign.Id}`,
+            campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined,
             parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
             Id: campaign.Id,
         }));
+        this.checkInitialChildren(); // Check for children on initial load
+    }
 
-        this.gridData = this.updateRowChildren(parentRowName, this.gridData, newChildren);
+    processChildCampaignData(campaigns, parentRowName) {
+      const newChildren = campaigns.map((campaign) => ({
+          ...campaign,
+          _children: undefined, // Initially undefined for new children
+          Name: campaign.Name,
+          ParentCampaignName: campaign.Parent?.Name,
+          campaignUrl: `/${campaign.Id}`,
+          parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
+          Id: campaign.Id,
+      }));
+
+      this.gridData = this.updateRowChildren(parentRowName, this.gridData, newChildren);
+      this.checkChildrenOfChildren(newChildren); // Check for children of the newly added children
     }
 
     async checkInitialChildren() {
-        if (this._initialLoadComplete) return; // Prevent multiple checks
-
         const updatedData = [];
         for (const row of this.gridData) {
-            try {
-                const children = await getChildCampaigns({ parentId: row.Id });
-                const updatedRow = {
-                    ...row,
-                    _children: children && children.length > 0 ? [] : undefined, // [] if children, undefined if not
-                };
-                updatedData.push(updatedRow);
-            } catch (error) {
-                console.error("Error checking for children:", error);
-                updatedData.push(row); // Keep original row on error
-            }
+            updatedData.push(await this.checkRowForChildren(row));
         }
         this.gridData = updatedData;
-        this._initialLoadComplete = true; // Mark initial load as complete
+    }
+
+    // Recursively checks for children and updates _children accordingly
+    async checkRowForChildren(row) {
+        try {
+            const children = await getChildCampaigns({ parentId: row.Id });
+            const updatedRow = {
+                ...row,
+                _children: children && children.length > 0 ? [] : undefined, // [] if children, undefined if not
+            };
+            return updatedRow;
+        } catch (error) {
+            console.error("Error checking for children:", error);
+            return row; // Return original row on error
+        }
+    }
+      // --- NEW FUNCTION ---
+    async checkChildrenOfChildren(newChildren) {
+        const updatedChildren = [];
+        for (const child of newChildren) {
+            updatedChildren.push(await this.checkRowForChildren(child));
+        }
+
+        // Find and update the children in the main gridData
+        this.gridData = this.gridData.map(row => {
+            if(row._children && Array.isArray(row._children)) {
+              let updatedRowChildren = row._children.map(originalChild => {
+                let updatedChild = updatedChildren.find(uc => uc.Id === originalChild.Id);
+                return updatedChild ? updatedChild : originalChild;
+              });
+                return { ...row, _children: updatedRowChildren};
+              }
+            return row;
+        });
     }
 
     // Recursively update children of a row
@@ -151,6 +168,7 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             return row;
         });
     }
+
     // Remove the expand arrow by setting _children to undefined
     removeExpandArrow(rowName, data) {
         return this.updateRowChildren(rowName, data, undefined);
