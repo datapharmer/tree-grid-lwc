@@ -1,32 +1,42 @@
 import { LightningElement, wire } from "lwc";
 import { ShowToastEvent } from "lightning/platformShowToastEvent";
+import { NavigationMixin } from "lightning/navigation";
 
-// Import Apex methods
+// Import the schema
+import CAMPAIGN_NAME from "@salesforce/schema/Campaign.Name";
+import PARENT_CAMPAIGN_NAME from "@salesforce/schema/Campaign.Parent.Name";
+import TYPE from "@salesforce/schema/Campaign.Type";
+
+// Import Apex
 import getAllParentCampaigns from "@salesforce/apex/DynamicTreeGridController.getAllParentCampaigns";
 import getChildCampaigns from "@salesforce/apex/DynamicTreeGridController.getChildCampaigns";
 
-// Global Constants
 const COLS = [
     {
-        fieldName: "Name",
         label: "Campaign Name",
-        type: "text",
-        cellAttributes: {
-            class: { fieldName: "campaignLinkClass" },
+        fieldName: "campaignUrl",  // Use a dedicated field for the URL
+        type: "url",
+        typeAttributes: {
+            label: { fieldName: "Name" }, // Display the Name
+            target: "_blank"
         },
+        cellAttributes: { class: { fieldName: 'slds-truncate' } }
+
     },
     {
-        fieldName: "ParentCampaignName",
         label: "Parent Campaign",
-        type: "text",
-        cellAttributes: {
-            class: { fieldName: "parentCampaignLinkClass" },
+        fieldName: "parentCampaignUrl", // Use a dedicated field for the URL
+        type: "url",
+        typeAttributes: {
+            label: { fieldName: "ParentCampaignName" }, // Display the ParentCampaignName
+            target: "_blank"
         },
+        cellAttributes: { class: { fieldName: 'slds-truncate' } }
     },
     { fieldName: "Type", label: "Campaign Type" }
 ];
 
-export default class DynamicTreeGrid extends LightningElement {
+export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     gridColumns = COLS;
     isLoading = true;
     gridData = [];
@@ -34,15 +44,9 @@ export default class DynamicTreeGrid extends LightningElement {
     @wire(getAllParentCampaigns, {})
     parentCampaigns({ error, data }) {
         if (error) {
-            console.error("Error loading campaigns", error);
+            console.error("error loading campaigns", error);
         } else if (data) {
-            this.gridData = data.map((campaign) => ({
-                _children: [],
-                ...campaign,
-                ParentCampaignName: campaign.Parent?.Name,
-                campaignLinkClass: campaign.Id ? "clickable-link" : "",
-                parentCampaignLinkClass: campaign.Parent?.Id ? "clickable-link" : "",
-            }));
+            this.processCampaignData(data); // Call a separate processing function
             this.isLoading = false;
         }
     }
@@ -53,19 +57,8 @@ export default class DynamicTreeGrid extends LightningElement {
             this.isLoading = true;
             getChildCampaigns({ parentId: rowName })
                 .then((result) => {
-                    if (result && result.length > 0) {
-                        const newChildren = result.map((child) => ({
-                            _children: [],
-                            ...child,
-                            ParentCampaignName: child.Parent?.Name,
-                            campaignLinkClass: child.Id ? "clickable-link" : "",
-                            parentCampaignLinkClass: child.Parent?.Id ? "clickable-link" : "",
-                        }));
-                        this.gridData = this.getNewDataWithChildren(
-                            rowName,
-                            this.gridData,
-                            newChildren
-                        );
+                    if (result) {
+                        this.processChildCampaignData(result, rowName);  //Separate processing for Children
                     } else {
                         this.dispatchEvent(
                             new ShowToastEvent({
@@ -80,8 +73,8 @@ export default class DynamicTreeGrid extends LightningElement {
                     console.error("Error loading child campaigns", error);
                     this.dispatchEvent(
                         new ShowToastEvent({
-                            title: "Error Loading Child Campaigns",
-                            message: error?.message,
+                            title: "Error Loading Children Campaigns",
+                            message: error + " " + error?.message,
                             variant: "error"
                         })
                     );
@@ -92,21 +85,54 @@ export default class DynamicTreeGrid extends LightningElement {
         }
     }
 
-    getNewDataWithChildren(rowName, data, children) {
-        return data.map((row) => {
-            if (row.Id === rowName) {
-                row._children = children;
-            } else if (row._children && row._children.length > 0) {
-                row._children = this.getNewDataWithChildren(rowName, row._children, children);
-            }
-            return row;
+
+    // --- Data Processing Functions ---
+
+    processCampaignData(campaigns) {
+        this.gridData = campaigns.map((campaign) => {
+            return {
+                ...campaign,
+                _children: [],
+                Name: campaign.Name, // Keep the original Name
+                ParentCampaignName: campaign.Parent?.Name, // Keep original Parent Name
+                campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined, // URL for navigation
+                parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
+                Id: campaign.Id,
+            };
         });
     }
 
-    handleClick(event) {
-        const recordId = event.target.dataset.id;
-        if (recordId) {
-            window.open(`/lightning/r/Campaign/${recordId}/view`, "_blank");
-        }
+    processChildCampaignData(campaigns, parentRowName) {
+        const newChildren = campaigns.map((campaign) => ({
+            ...campaign,
+            _children: [],
+            Name: campaign.Name,
+            ParentCampaignName: campaign.Parent?.Name,
+            campaignUrl: `/${campaign.Id}`,
+            parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
+            Id: campaign.Id
+        }));
+
+        this.gridData = this.getNewDataWithChildren(parentRowName, this.gridData, newChildren);
     }
+
+    getNewDataWithChildren(rowName, data, children) {
+                return data.map((row) => {
+                        let hasChildrenContent = false;
+                        if (
+                                Object.prototype.hasOwnProperty.call(row, "_children") &&
+                                Array.isArray(row._children) &&
+                                row._children.length > 0
+                        ) {
+                                hasChildrenContent = true;
+                        }
+
+                        if (row.Id === rowName) {
+                                row._children = children;
+                        } else if (hasChildrenContent) {
+                                this.getNewDataWithChildren(rowName, row._children, children);
+                        }
+                        return row;
+                });
+        }
 }
