@@ -57,9 +57,11 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             this.isLoading = true;
             getChildCampaigns({ parentId: rowName })
                 .then((result) => {
-                    if (result) {
+                    if (result && result.length > 0) {
                         this.processChildCampaignData(result, rowName);  //Separate processing for Children
                     } else {
+                         // No children: Update the row to remove the expand arrow
+                        this.gridData = this.removeExpandArrow(rowName, this.gridData);
                         this.dispatchEvent(
                             new ShowToastEvent({
                                 title: "No children",
@@ -92,28 +94,52 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
         this.gridData = campaigns.map((campaign) => {
             return {
                 ...campaign,
-                _children: [],
+                _children: [],  // Initially, assume no children
                 Name: campaign.Name, // Keep the original Name
                 ParentCampaignName: campaign.Parent?.Name, // Keep original Parent Name
                 campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined, // URL for navigation
                 parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
                 Id: campaign.Id,
+                hasChildren: false, // Add hasChildren property, initially false
+
             };
         });
+        //check if any campaign has children
+        this.checkInitialChildren();
+
     }
 
     processChildCampaignData(campaigns, parentRowName) {
         const newChildren = campaigns.map((campaign) => ({
             ...campaign,
-            _children: [],
+            _children: [],  // Initially, assume no children
             Name: campaign.Name,
             ParentCampaignName: campaign.Parent?.Name,
             campaignUrl: `/${campaign.Id}`,
             parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
-            Id: campaign.Id
+            Id: campaign.Id,
+            hasChildren: false, // Assume no children initially
         }));
 
         this.gridData = this.getNewDataWithChildren(parentRowName, this.gridData, newChildren);
+        // After adding children, update the parent's hasChildren flag.
+        this.gridData = this.updateParentHasChildren(parentRowName, this.gridData, true);
+    }
+    //New method to check if parent has children
+    async checkInitialChildren() {
+        for (let i = 0; i < this.gridData.length; i++) {
+            const campaign = this.gridData[i];
+            try {
+                const children = await getChildCampaigns({ parentId: campaign.Id });
+                if (children && children.length > 0) {
+                   // Update hasChildren flag in the gridData
+                   this.gridData = this.updateParentHasChildren(campaign.Id, this.gridData, true);
+                }
+            } catch (error) {
+                console.error("Error checking for children:", error);
+                // Handle error appropriately, e.g., show a toast message
+            }
+        }
     }
 
     getNewDataWithChildren(rowName, data, children) {
@@ -135,4 +161,21 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
                         return row;
                 });
         }
+
+     // Function to update the parent's hasChildren flag
+     updateParentHasChildren(rowName, data, hasChildren) {
+        return data.map((row) => {
+            if (row.Id === rowName) {
+                return { ...row, _children: hasChildren ? row._children : [], hasChildren: hasChildren }; // Update hasChildren
+            } else if (row._children && row._children.length > 0) {
+                return { ...row, _children: this.updateParentHasChildren(rowName, row._children, hasChildren) };
+            }
+            return row;
+        });
+    }
+
+    // Function to remove the expand arrow if no children are found
+    removeExpandArrow(rowName, data) {
+       return this.updateParentHasChildren(rowName, data, false);
+    }
 }
