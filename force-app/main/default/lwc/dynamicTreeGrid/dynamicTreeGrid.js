@@ -139,17 +139,12 @@ handleOnToggle(event) {
 
     getNewDataWithChildren(rowName, data, children) {
         return data.map((row) => {
-            let hasChildrenContent = false;
-            if (
-                Object.prototype.hasOwnProperty.call(row, "_children") &&
-                Array.isArray(row._children)
-            ) {
-                hasChildrenContent = row._children.length > 0; // Check if *already* loaded
-            }
-
             if (row.Id === rowName) {
-                row._children = children;  // Set the children
-            } else if (row._children) { // Use _children directly.  More efficient
+                // Check if children are already loaded
+                if (!row._children || row._children.length === 0) {
+                    row._children = children;  // Set the children only if they are not already loaded
+                }
+            } else if (row._children) {
                 row._children = this.getNewDataWithChildren(rowName, row._children, children);
             }
             return row;
