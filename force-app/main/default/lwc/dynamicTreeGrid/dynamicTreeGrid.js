@@ -109,7 +109,7 @@ handleOnToggle(event) {
                                 childData._children = [];
                             }
                             newChildren.push(childData);
-                            newChildren.push({
+                            /*newChildren.push({
                                 ...child,
                                 _children: hasGrandChildren ? [] : undefined,  // Key change:  [] or undefined
                                 Name: child.Name,
@@ -117,7 +117,7 @@ handleOnToggle(event) {
                                 campaignUrl: `/${child.Id}`,
                                 parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
                                 Id: child.Id
-                            });
+                            });*/
                         }
                         this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
                     } else {
