@@ -93,32 +93,21 @@ handleOnToggle(event) {
                 .then(async (result) => {  // Make this an async function
                     if (result && result.length > 0) {
                         const newChildren = [];
+                        const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
                         for (const child of result) {
-                            // Check for grandchildren *before* adding
-                            const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
-                            const childData = {
-                                ...child,
-                                Name: child.Name,
-                                ParentCampaignName: child.Parent?.Name,
-                                campaignUrl: `/${child.Id}`,
-                                parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
-                                Id: child.Id
-                            };
-                            // Only add _children if hasGrandChildren is true
-                            if (hasGrandChildren) {
-                                childData._children = [];
-                            }
-                            newChildren.push(childData);
-                            /*newChildren.push({
-                                ...child,
-                                _children: hasGrandChildren ? [] : undefined,  // Key change:  [] or undefined
-                                Name: child.Name,
-                                ParentCampaignName: child.Parent?.Name,
-                                campaignUrl: `/${child.Id}`,
-                                parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
-                                Id: child.Id
-                            });*/
+                        const childData = {
+                            ...child,
+                            Name: child.Name,
+                            ParentCampaignName: child.Parent?.Name,
+                            campaignUrl: `/${child.Id}`,
+                            parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
+                            Id: child.Id
+                        };
+                        if (hasGrandChildren) {
+                            childData._children = [];
                         }
+                        newChildren.push(childData);
+                    }
                         this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
                     } else {
                         // No children found.  Update the row to remove the expand icon.
