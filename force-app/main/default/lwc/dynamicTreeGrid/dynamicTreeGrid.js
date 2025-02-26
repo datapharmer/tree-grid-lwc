@@ -60,25 +60,30 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     }
 
 async processInitialCampaignData(campaigns) {
-        const processedData = [];
+    const processedData = [];
+    
+    for (const campaign of campaigns) {
+        const hasChildren = await hasChildCampaigns({ parentId: campaign.Id });
+        
+        const campaignData = {
+            ...campaign,
+            Name: campaign.Name,
+            ParentCampaignName: campaign.Parent?.Name,
+            campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined,
+            parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
+            Id: campaign.Id,
+        };
 
-        for (const campaign of campaigns) {
-            // Check for children *before* adding to gridData
-            const hasChildren = await hasChildCampaigns({ parentId: campaign.Id });
-
-            processedData.push({
-                ...campaign,
-                _children: hasChildren ? [] : undefined, //  empty array (for lazy loading) or undefined if no children
-                Name: campaign.Name,
-                ParentCampaignName: campaign.Parent?.Name,
-                campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined,
-                parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
-                Id: campaign.Id,
-            });
+        // Only add _children if hasChildren is true
+        if (hasChildren) {
+            campaignData._children = [];
         }
-        this.gridData = processedData;
-        this.isLoading = false;
+        
+        processedData.push(campaignData);
     }
+    this.gridData = processedData;
+    this.isLoading = false;
+}
 
 handleOnToggle(event) {
         const rowName = event.detail.name;
@@ -91,6 +96,19 @@ handleOnToggle(event) {
                         for (const child of result) {
                             // Check for grandchildren *before* adding
                             const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
+                            const childData = {
+                                ...child,
+                                Name: child.Name,
+                                ParentCampaignName: child.Parent?.Name,
+                                campaignUrl: `/${child.Id}`,
+                                parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
+                                Id: child.Id
+                            };
+                            // Only add _children if hasGrandChildren is true
+                            if (hasGrandChildren) {
+                                childData._children = [];
+                            }
+                            newChildren.push(childData);
                             newChildren.push({
                                 ...child,
                                 _children: hasGrandChildren ? [] : undefined,  // Key change:  [] or undefined
