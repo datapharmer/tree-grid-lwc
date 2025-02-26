@@ -77,53 +77,77 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             });
         }
         this.gridData = processedData;
-        console.log("Updated gridData:", JSON.stringify(this.gridData, null, 2));
         this.isLoading = false;
     }
 
-
 handleOnToggle(event) {
-    const rowName = event.detail.name;
-    if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
-        this.isLoading = true;
-        getChildCampaigns({ parentId: rowName })
-            .then(async (result) => {  
-                if (result && result.length > 0) {
-                    // ... (rest of your code)
-                } else {
-                    // No children found.  Update the row to remove the expand icon.
-                    this.gridData = this.removeExpandIcon(rowName, this.gridData);
-                    console.log("Updated gridData:", JSON.stringify(this.gridData, null, 2));
+        const rowName = event.detail.name;
+        if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
+            this.isLoading = true;
+            getChildCampaigns({ parentId: rowName })
+                .then(async (result) => {  // Make this an async function
+                    if (result && result.length > 0) {
+                        const newChildren = [];
+                        for (const child of result) {
+                            // Check for grandchildren *before* adding
+                            const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
+                            newChildren.push({
+                                ...child,
+                                _children: hasGrandChildren ? [] : undefined,  // Key change:  [] or undefined
+                                Name: child.Name,
+                                ParentCampaignName: child.Parent?.Name,
+                                campaignUrl: `/${child.Id}`,
+                                parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
+                                Id: child.Id
+                            });
+                        }
+                        this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
+                    } else {
+                        // No children found.  Update the row to remove the expand icon.
+                        this.gridData = this.removeExpandIcon(rowName, this.gridData);
+                        this.dispatchEvent(
+                            new ShowToastEvent({
+                                title: "No children",
+                                message: "No children for the selected Campaign",
+                                variant: "warning"
+                            })
+                        );
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error loading child campaigns", error);
                     this.dispatchEvent(
                         new ShowToastEvent({
-                            title: "No children",
-                            message: "No children for the selected Campaign",
-                            variant: "warning"
+                            title: "Error Loading Children Campaigns",
+                            message: error.body.message,
+                            variant: "error"
                         })
                     );
-                }
-            })
-            .catch((error) => {
-                // ... (error handling)
-            })
-            .finally(() => {
-                this.isLoading = false;
-            });
-    }
-}
-
-getNewDataWithChildren(rowName, data, children) {
-    return data.map((row) => {
-        if (row.Id === rowName) {
-            // Set _children to the provided children array or undefined if empty
-            row._children = children.length > 0 ? children : undefined;
-        } else if (row._children) {
-            // Recursively process child rows
-            row._children = this.getNewDataWithChildren(rowName, row._children, children);
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
         }
-        return row;
-    });
-}
+    }
+
+    getNewDataWithChildren(rowName, data, children) {
+        return data.map((row) => {
+            let hasChildrenContent = false;
+            if (
+                Object.prototype.hasOwnProperty.call(row, "_children") &&
+                Array.isArray(row._children)
+            ) {
+                hasChildrenContent = row._children.length > 0; // Check if *already* loaded
+            }
+
+            if (row.Id === rowName) {
+                row._children = children;  // Set the children
+            } else if (row._children) { // Use _children directly.  More efficient
+                row._children = this.getNewDataWithChildren(rowName, row._children, children);
+            }
+            return row;
+        });
+    }
 
 
     removeExpandIcon(rowName, data) {
