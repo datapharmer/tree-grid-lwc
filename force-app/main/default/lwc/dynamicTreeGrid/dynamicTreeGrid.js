@@ -77,6 +77,7 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             });
         }
         this.gridData = processedData;
+        console.log("Updated gridData:", JSON.stringify(this.gridData, null, 2));
         this.isLoading = false;
     }
 
@@ -92,6 +93,7 @@ handleOnToggle(event) {
                 } else {
                     // No children found.  Update the row to remove the expand icon.
                     this.gridData = this.removeExpandIcon(rowName, this.gridData);
+                    console.log("Updated gridData:", JSON.stringify(this.gridData, null, 2));
                     this.dispatchEvent(
                         new ShowToastEvent({
                             title: "No children",
@@ -110,24 +112,18 @@ handleOnToggle(event) {
     }
 }
 
-    getNewDataWithChildren(rowName, data, children) {
-        return data.map((row) => {
-            let hasChildrenContent = false;
-            if (
-                Object.prototype.hasOwnProperty.call(row, "_children") &&
-                Array.isArray(row._children)
-            ) {
-                hasChildrenContent = row._children.length > 0; // Check if *already* loaded
-            }
-
-            if (row.Id === rowName) {
-                row._children = children;  // Set the children
-            } else if (row._children) { // Use _children directly.  More efficient
-                row._children = this.getNewDataWithChildren(rowName, row._children, children);
-            }
-            return row;
-        });
-    }
+getNewDataWithChildren(rowName, data, children) {
+    return data.map((row) => {
+        if (row.Id === rowName) {
+            // Set _children to the provided children array or undefined if empty
+            row._children = children.length > 0 ? children : undefined;
+        } else if (row._children) {
+            // Recursively process child rows
+            row._children = this.getNewDataWithChildren(rowName, row._children, children);
+        }
+        return row;
+    });
+}
 
 
     removeExpandIcon(rowName, data) {
