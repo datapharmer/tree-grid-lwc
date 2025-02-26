@@ -1,0 +1,15 @@
+{
+    "packageDirectories": [
+        {
+            "path": "force-app",
+            "default": true,
+            "package": "Dynamic Tree Grid",
+            "postInstallScript": "PostInstaller",
+            "apexTestAccess": {
+                "permissionSets": []
+            }
+        }
+    ],
+    "sfdcLoginUrl": "https://login.salesforce.com",
+    "sourceApiVersion": "54.0"
+}
