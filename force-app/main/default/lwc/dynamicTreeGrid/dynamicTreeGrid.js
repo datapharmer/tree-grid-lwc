@@ -59,7 +59,7 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
         }
     }
 
-    async processInitialCampaignData(campaigns) {
+async processInitialCampaignData(campaigns) {
         const processedData = [];
 
         for (const campaign of campaigns) {
