@@ -86,15 +86,16 @@ async processInitialCampaignData(campaigns) {
 }
 
 handleOnToggle(event) {
-        const rowName = event.detail.name;
-        if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
-            this.isLoading = true;
-            getChildCampaigns({ parentId: rowName })
-                .then(async (result) => {  // Make this an async function
-                    if (result && result.length > 0) {
-                        const newChildren = [];
+    const rowName = event.detail.name;
+    if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
+        this.isLoading = true;
+        getChildCampaigns({ parentId: rowName })
+            .then(async (result) => {
+                if (result && result.length > 0) {
+                    const newChildren = [];
+                    for (const child of result) {
+                        // Move hasGrandChildren check inside the loop
                         const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
-                        for (const child of result) {
                         const childData = {
                             ...child,
                             Name: child.Name,
@@ -108,19 +109,18 @@ handleOnToggle(event) {
                         }
                         newChildren.push(childData);
                     }
-                        this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
-                    } else {
-                        // No children found.  Update the row to remove the expand icon.
-                        this.gridData = this.removeExpandIcon(rowName, this.gridData);
-                        this.dispatchEvent(
-                            new ShowToastEvent({
-                                title: "No children",
-                                message: "No children for the selected Campaign",
-                                variant: "warning"
-                            })
-                        );
-                    }
-                })
+                    this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
+                } else {
+                    this.gridData = this.removeExpandIcon(rowName, this.gridData);
+                    this.dispatchEvent(
+                        new ShowToastEvent({
+                            title: "No children",
+                            message: "No children for the selected Campaign",
+                            variant: "warning"
+                        })
+                    );
+                }
+            })
                 .catch((error) => {
                     console.error("Error loading child campaigns", error);
                     this.dispatchEvent(
@@ -131,11 +131,11 @@ handleOnToggle(event) {
                         })
                     );
                 })
-                .finally(() => {
-                    this.isLoading = false;
-                });
-        }
+            .finally(() => {
+                this.isLoading = false;
+            });
     }
+}
 
     getNewDataWithChildren(rowName, data, children) {
         return data.map((row) => {
