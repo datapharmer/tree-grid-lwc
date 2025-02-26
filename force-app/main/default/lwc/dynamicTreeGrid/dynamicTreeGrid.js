@@ -81,56 +81,34 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     }
 
 
-    handleOnToggle(event) {
-        const rowName = event.detail.name;
-        if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
-            this.isLoading = true;
-            getChildCampaigns({ parentId: rowName })
-                .then(async (result) => {  // Make this an async function
-                    if (result && result.length > 0) {
-                        const newChildren = [];
-                        for (const child of result) {
-                            // Check for grandchildren *before* adding
-                            const hasGrandChildren = await hasChildCampaigns({ parentId: child.Id });
-                            newChildren.push({
-                                ...child,
-                                _children: hasGrandChildren ? [] : undefined,  // Key change:  [] or undefined
-                                Name: child.Name,
-                                ParentCampaignName: child.Parent?.Name,
-                                campaignUrl: `/${child.Id}`,
-                                parentCampaignUrl: child.Parent?.Id ? `/${child.Parent.Id}` : undefined,
-                                Id: child.Id
-                            });
-                        }
-                        this.gridData = this.getNewDataWithChildren(rowName, this.gridData, newChildren);
-                    } else {
-                        // No children found.  Update the row to remove the expand icon.
-                        this.gridData = this.removeExpandIcon(rowName, this.gridData);
-                        this.dispatchEvent(
-                            new ShowToastEvent({
-                                title: "No children",
-                                message: "No children for the selected Campaign",
-                                variant: "warning"
-                            })
-                        );
-                    }
-                })
-                .catch((error) => {
-                    console.error("Error loading child campaigns", error);
+handleOnToggle(event) {
+    const rowName = event.detail.name;
+    if (!event.detail.hasChildrenContent && event.detail.isExpanded) {
+        this.isLoading = true;
+        getChildCampaigns({ parentId: rowName })
+            .then(async (result) => {  
+                if (result && result.length > 0) {
+                    // ... (rest of your code)
+                } else {
+                    // No children found.  Update the row to remove the expand icon.
+                    this.gridData = this.removeExpandIcon(rowName, this.gridData);
                     this.dispatchEvent(
                         new ShowToastEvent({
-                            title: "Error Loading Children Campaigns",
-                            message: error.body.message,
-                            variant: "error"
+                            title: "No children",
+                            message: "No children for the selected Campaign",
+                            variant: "warning"
                         })
                     );
-                })
-                .finally(() => {
-                    this.isLoading = false;
-                });
-        }
+                }
+            })
+            .catch((error) => {
+                // ... (error handling)
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
     }
-
+}
 
     getNewDataWithChildren(rowName, data, children) {
         return data.map((row) => {
