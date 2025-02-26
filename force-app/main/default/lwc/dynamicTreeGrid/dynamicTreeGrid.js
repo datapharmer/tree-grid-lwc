@@ -14,21 +14,20 @@ import getChildCampaigns from "@salesforce/apex/DynamicTreeGridController.getChi
 const COLS = [
     {
         label: "Campaign Name",
-        fieldName: "campaignUrl",  // Use a dedicated field for the URL
+        fieldName: "campaignUrl",
         type: "url",
         typeAttributes: {
-            label: { fieldName: "Name" }, // Display the Name
+            label: { fieldName: "Name" },
             target: "_blank"
         },
         cellAttributes: { class: { fieldName: 'slds-truncate' } }
-
     },
     {
         label: "Parent Campaign",
-        fieldName: "parentCampaignUrl", // Use a dedicated field for the URL
+        fieldName: "parentCampaignUrl",
         type: "url",
         typeAttributes: {
-            label: { fieldName: "ParentCampaignName" }, // Display the ParentCampaignName
+            label: { fieldName: "ParentCampaignName" },
             target: "_blank"
         },
         cellAttributes: { class: { fieldName: 'slds-truncate' } }
@@ -40,16 +39,18 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     gridColumns = COLS;
     isLoading = true;
     gridData = [];
+    _initialLoadComplete = false;
 
     @wire(getAllParentCampaigns, {})
     parentCampaigns({ error, data }) {
         if (error) {
             console.error("error loading campaigns", error);
         } else if (data) {
-            this.processCampaignData(data); // Call a separate processing function
+            this.processCampaignData(data);
             this.isLoading = false;
         }
     }
+
 
     handleOnToggle(event) {
         const rowName = event.detail.name;
@@ -58,9 +59,9 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
             getChildCampaigns({ parentId: rowName })
                 .then((result) => {
                     if (result && result.length > 0) {
-                        this.processChildCampaignData(result, rowName);  //Separate processing for Children
+                        this.processChildCampaignData(result, rowName);
                     } else {
-                         // No children: Update the row to remove the expand arrow
+                        // No children:  Remove the arrow.
                         this.gridData = this.removeExpandArrow(rowName, this.gridData);
                         this.dispatchEvent(
                             new ShowToastEvent({
@@ -91,91 +92,67 @@ export default class DynamicTreeGrid extends NavigationMixin(LightningElement) {
     // --- Data Processing Functions ---
 
     processCampaignData(campaigns) {
-        this.gridData = campaigns.map((campaign) => {
-            return {
-                ...campaign,
-                _children: [],  // Initially, assume no children
-                Name: campaign.Name, // Keep the original Name
-                ParentCampaignName: campaign.Parent?.Name, // Keep original Parent Name
-                campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined, // URL for navigation
-                parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
-                Id: campaign.Id,
-                hasChildren: false, // Add hasChildren property, initially false
-
-            };
-        });
-        //check if any campaign has children
-        this.checkInitialChildren();
-
+      this.gridData = campaigns.map((campaign) => ({
+        ...campaign,
+        _children: undefined, // Crucial: Set to undefined initially
+        Name: campaign.Name,
+        ParentCampaignName: campaign.Parent?.Name,
+        campaignUrl: campaign.Id ? `/${campaign.Id}` : undefined,
+        parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
+        Id: campaign.Id,
+      }));
+      // Check for children after initial data load
+      this.checkInitialChildren();
     }
 
     processChildCampaignData(campaigns, parentRowName) {
         const newChildren = campaigns.map((campaign) => ({
             ...campaign,
-            _children: [],  // Initially, assume no children
+            _children: undefined, // Crucial: Set to undefined initially
             Name: campaign.Name,
             ParentCampaignName: campaign.Parent?.Name,
             campaignUrl: `/${campaign.Id}`,
             parentCampaignUrl: campaign.Parent?.Id ? `/${campaign.Parent.Id}` : undefined,
             Id: campaign.Id,
-            hasChildren: false, // Assume no children initially
         }));
 
-        this.gridData = this.getNewDataWithChildren(parentRowName, this.gridData, newChildren);
-        // After adding children, update the parent's hasChildren flag.
-        this.gridData = this.updateParentHasChildren(parentRowName, this.gridData, true);
+        this.gridData = this.updateRowChildren(parentRowName, this.gridData, newChildren);
     }
-    //New method to check if parent has children
+
     async checkInitialChildren() {
-        for (let i = 0; i < this.gridData.length; i++) {
-            const campaign = this.gridData[i];
+        if (this._initialLoadComplete) return; // Prevent multiple checks
+
+        const updatedData = [];
+        for (const row of this.gridData) {
             try {
-                const children = await getChildCampaigns({ parentId: campaign.Id });
-                if (children && children.length > 0) {
-                   // Update hasChildren flag in the gridData
-                   this.gridData = this.updateParentHasChildren(campaign.Id, this.gridData, true);
-                }
+                const children = await getChildCampaigns({ parentId: row.Id });
+                const updatedRow = {
+                    ...row,
+                    _children: children && children.length > 0 ? [] : undefined, // [] if children, undefined if not
+                };
+                updatedData.push(updatedRow);
             } catch (error) {
                 console.error("Error checking for children:", error);
-                // Handle error appropriately, e.g., show a toast message
+                updatedData.push(row); // Keep original row on error
             }
         }
+        this.gridData = updatedData;
+        this._initialLoadComplete = true; // Mark initial load as complete
     }
 
-    getNewDataWithChildren(rowName, data, children) {
-                return data.map((row) => {
-                        let hasChildrenContent = false;
-                        if (
-                                Object.prototype.hasOwnProperty.call(row, "_children") &&
-                                Array.isArray(row._children) &&
-                                row._children.length > 0
-                        ) {
-                                hasChildrenContent = true;
-                        }
-
-                        if (row.Id === rowName) {
-                                row._children = children;
-                        } else if (hasChildrenContent) {
-                                this.getNewDataWithChildren(rowName, row._children, children);
-                        }
-                        return row;
-                });
-        }
-
-     // Function to update the parent's hasChildren flag
-     updateParentHasChildren(rowName, data, hasChildren) {
-        return data.map((row) => {
+    // Recursively update children of a row
+    updateRowChildren(rowName, data, children) {
+        return data.map(row => {
             if (row.Id === rowName) {
-                return { ...row, _children: hasChildren ? row._children : [], hasChildren: hasChildren }; // Update hasChildren
-            } else if (row._children && row._children.length > 0) {
-                return { ...row, _children: this.updateParentHasChildren(rowName, row._children, hasChildren) };
+                return { ...row, _children: children };
+            } else if (row._children && Array.isArray(row._children)) {
+                return { ...row, _children: this.updateRowChildren(rowName, row._children, children) };
             }
             return row;
         });
     }
-
-    // Function to remove the expand arrow if no children are found
+    // Remove the expand arrow by setting _children to undefined
     removeExpandArrow(rowName, data) {
-       return this.updateParentHasChildren(rowName, data, false);
+        return this.updateRowChildren(rowName, data, undefined);
     }
 }
