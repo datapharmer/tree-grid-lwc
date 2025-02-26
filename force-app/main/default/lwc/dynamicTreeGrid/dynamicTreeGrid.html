@@ -1,0 +1,11 @@
+<template>
+    <lightning-card>
+        <lightning-tree-grid
+            columns={gridColumns}
+            data={gridData}
+            is-loading={isLoading}
+            key-field="Id"
+            ontoggle={handleOnToggle}
+        ></lightning-tree-grid>
+    </lightning-card>
+</template>
